@@ -107,6 +107,7 @@
     <audio id="static-audio" src="radiostatic.mp3" loop volume="1"></audio>
     <audio id="tuning-audio" src="tuning.mp3"></audio>
     <audio id="broadcast-audio" src="broadcast.mp3"></audio>
+    <audio id="click-audio" src="click.mp3"></audio>
 
     <script>
         const startScreen = document.getElementById('start-screen');
@@ -117,12 +118,14 @@
         const staticAudio = document.getElementById('static-audio');
         const tuningAudio = document.getElementById('tuning-audio');
         const broadcastAudio = document.getElementById('broadcast-audio');
+        const clickAudio = document.getElementById('click-audio');
 
         const targetFrequency = 97.169;
         const tuningThreshold = 2;
         const successThreshold = 0.001;
 
         let currentFrequency = 96.66;
+        let previousFrequency = 96.66;
         let lastClientX = 0;
         let isDragging = false;
         let isTuningSoundPlaying = false;
@@ -134,6 +137,12 @@
         let staticFadeInInterval;
 
         function updateDisplay() {
+            if (Math.floor(currentFrequency * 10) !== Math.floor(previousFrequency * 10)) {
+                clickAudio.currentTime = 0;
+                clickAudio.play();
+            }
+
+            previousFrequency = currentFrequency;
             frequencyDisplay.textContent = currentFrequency.toFixed(3);
         }
 
@@ -156,8 +165,8 @@
         function playBroadcast() {
             if (isBroadcastPlaying) return;
             isBroadcastPlaying = true;
-            staticAudio.volume = 0.8;
-            broadcastAudio.volume = 0.4; // Set broadcast volume to 40%
+            staticAudio.volume = 1.0;
+            broadcastAudio.volume = 0.18; // Lowered by another 10%
             broadcastAudio.play();
         }
 
@@ -262,6 +271,7 @@
 
         updateDisplay();
         staticAudio.volume = 0;
+        clickAudio.volume = 0.05;
     </script>
 </body>
 </html>
