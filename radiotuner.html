@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en" uk-UK>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tune Radio</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Spectral:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            background-color: #000;
+            color: #eee;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            user-select: none;
+            position: relative;
+        }
+
+        #start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            font-family: 'Spectral', serif;
+            font-size: 3em;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            opacity: 1;
+            transition: opacity 1s ease-in-out;
+            z-index: 100;
+            animation: heartbeat-color 2s infinite ease-in-out, heartbeat-pulse 2s infinite ease-in-out;
+        }
+        @keyframes heartbeat-color {
+            0%, 100% { color: white; }
+            50% { color: red; }
+        }
+        @keyframes heartbeat-pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        .tuner-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            opacity: 0;
+            transition: opacity 1s ease-in-out;
+        }
+
+        #frequency-display {
+            font-family: 'Spectral', serif;
+            font-size: 2.5em;
+            color: #ddd;
+            text-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+            font-weight: bold;
+        }
+
+        .tuning-knob-container {
+            position: relative;
+            width: 140px;
+            height: 140px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #tuning-knob {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            border: none;
+            cursor: grab;
+            touch-action: none;
+            background-image: url('dial.png');
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            transition: transform 0.05s linear;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <div id="start-screen">
+        Tune Radio
+    </div>
+
+    <div class="tuner-container">
+        <div id="frequency-display">96.660</div>
+        <div class="tuning-knob-container">
+            <div id="tuning-knob"></div>
+        </div>
+    </div>
+
+    <audio id="static-audio" src="radiostatic.mp3" loop volume="1"></audio>
+    <audio id="tuning-audio" src="tuning.mp3"></audio>
+    <audio id="broadcast-audio" src="broadcast.mp3"></audio>
+
+    <script>
+        const startScreen = document.getElementById('start-screen');
+        const tunerContainer = document.querySelector('.tuner-container');
+        const frequencyDisplay = document.getElementById('frequency-display');
+        const tuningKnob = document.getElementById('tuning-knob');
+
+        const staticAudio = document.getElementById('static-audio');
+        const tuningAudio = document.getElementById('tuning-audio');
+        const broadcastAudio = document.getElementById('broadcast-audio');
+
+        const targetFrequency = 97.169;
+        const tuningThreshold = 2;
+        const successThreshold = 0.001;
+
+        let currentFrequency = 96.66;
+        let lastClientX = 0;
+        let isDragging = false;
+        let isTuningSoundPlaying = false;
+        let isBroadcastPlaying = false;
+        const frequencyMin = 87.0;
+        const frequencyMax = 109.0;
+        let totalRotation = 0;
+        let broadcastTimer = null;
+        let staticFadeInInterval;
+
+        function updateDisplay() {
+            frequencyDisplay.textContent = currentFrequency.toFixed(3);
+        }
+
+        function playTuningSound() {
+            if (!isTuningSoundPlaying && !isBroadcastPlaying && Math.abs(currentFrequency - targetFrequency) < tuningThreshold) {
+                tuningAudio.currentTime = 0;
+                tuningAudio.play();
+                isTuningSoundPlaying = true;
+            }
+        }
+
+        function stopTuningSound() {
+            if (isTuningSoundPlaying) {
+                tuningAudio.pause();
+                tuningAudio.currentTime = 0;
+                isTuningSoundPlaying = false;
+            }
+        }
+
+        function playBroadcast() {
+            if (isBroadcastPlaying) return;
+            isBroadcastPlaying = true;
+            staticAudio.volume = 0.8;
+            broadcastAudio.volume = 0.4; // Set broadcast volume to 40%
+            broadcastAudio.play();
+        }
+
+        function stopBroadcast() {
+            if (!isBroadcastPlaying) return;
+            isBroadcastPlaying = false;
+            staticAudio.volume = 1.0;
+            broadcastAudio.pause();
+            broadcastAudio.currentTime = 0;
+        }
+
+        function checkFrequency() {
+            if (Math.abs(currentFrequency - targetFrequency) < successThreshold) {
+                if (!broadcastTimer) {
+                    broadcastTimer = setTimeout(() => {
+                        if (Math.abs(currentFrequency - targetFrequency) < successThreshold) {
+                            playBroadcast();
+                        }
+                    }, 2000);
+                }
+            } else {
+                if (broadcastTimer) {
+                    clearTimeout(broadcastTimer);
+                    broadcastTimer = null;
+                }
+                stopBroadcast();
+            }
+        }
+
+        function handleStart(e) {
+            isDragging = true;
+            lastClientX = e.clientX || e.touches?.[0]?.clientX || 0;
+            playTuningSound();
+            e.preventDefault();
+        }
+
+        function handleMove(e) {
+            if (!isDragging) return;
+            const clientX = e.clientX || e.touches?.[0]?.clientX || 0;
+            const deltaX = clientX - lastClientX;
+
+            currentFrequency -= deltaX * 0.001;
+            totalRotation += deltaX * -0.8;
+            currentFrequency = Math.max(frequencyMin, Math.min(frequencyMax, currentFrequency));
+
+            tuningKnob.style.transform = `rotate(${totalRotation}deg)`;
+            updateDisplay();
+
+            lastClientX = clientX;
+            playTuningSound();
+            e.preventDefault();
+
+            if (broadcastTimer) {
+                clearTimeout(broadcastTimer);
+                broadcastTimer = null;
+            }
+        }
+
+        function handleEnd() {
+            if (!isDragging) return;
+            isDragging = false;
+            stopTuningSound();
+            checkFrequency();
+        }
+
+        broadcastAudio.addEventListener('ended', () => {
+            if (isBroadcastPlaying) {
+                setTimeout(() => {
+                    broadcastAudio.currentTime = 0;
+                    broadcastAudio.play();
+                }, 2000);
+            }
+        });
+
+        tuningKnob.addEventListener('mousedown', handleStart);
+        document.addEventListener('mousemove', handleMove);
+        document.addEventListener('mouseup', handleEnd);
+
+        tuningKnob.addEventListener('touchstart', handleStart);
+        document.addEventListener('touchmove', handleMove);
+        document.addEventListener('touchend', handleEnd);
+
+        startScreen.addEventListener('click', () => {
+            startScreen.style.opacity = '0';
+            setTimeout(() => {
+                startScreen.style.display = 'none';
+                tunerContainer.style.opacity = '1';
+                staticAudio.play();
+                let volume = 0;
+                const intervalTime = 200;
+                const volumeIncrement = 0.2;
+
+                staticFadeInInterval = setInterval(() => {
+                    volume += volumeIncrement;
+                    staticAudio.volume = Math.min(1, volume);
+                    if (volume >= 1) {
+                        clearInterval(staticFadeInInterval);
+                    }
+                }, intervalTime);
+            }, 1000);
+        });
+
+        updateDisplay();
+        staticAudio.volume = 0;
+    </script>
+</body>
+</html>
